@@ -15,8 +15,8 @@ token at build, so it's added once the ASR number is in.
 
 | file | what it does |
 |------|--------------|
-| `handler.py` | RunPod worker. Boots Microsoft's VibeVoice vLLM ASR server (`:8000`, OpenAI-compatible). Each job: base64 audio → transcript, with decomposed timings. Optional Gemma polish when enabled. |
-| `Dockerfile` | `vllm/vllm-openai:v0.14.1` + the VibeVoice repo, with the ASR weights **baked in**. |
+| `handler.py` | RunPod worker. Boots VibeVoice through vLLM (`:8000`, OpenAI-compatible). Each job: base64 audio → transcript, with decomposed timings. Optional Gemma polish when enabled. |
+| `Dockerfile` | `vllm/vllm-openai:v0.14.1` + the VibeVoice repo, with the ASR weights and tokenizer files **baked in**. |
 | `.runpod/hub.json` | RunPod Hub deploy config (audio category, 24GB GPU pool, env toggles). |
 | `.runpod/tests.json` | Hub smoke test — a real base64 WAV through the ASR path. |
 | `bench_coldstart.py` | Runs **locally**. Hits the endpoint cold then warm, prints the table + verdict. |
@@ -26,6 +26,8 @@ token at build, so it's added once the ASR number is in.
 VibeVoice-ASR has a first-class vLLM path (Microsoft's `vllm_plugin`) exposing an
 **OpenAI-compatible `/v1/chat/completions`** endpoint — audio sent as a base64 `audio_url`.
 Microsoft serves it in **bf16 (unquantized)** → a 24GB card (L4 / A5000 / A10 / 4090).
+The handler launches `vllm serve` directly instead of `start_server.py` so worker cold
+start does not redo package installation, model download checks, or tokenizer generation.
 
 The RunPod **Hub has no network-volume option**, so the weights are **baked into the
 image** (`huggingface-cli download` at build). They download once during the Hub build, not
@@ -68,7 +70,10 @@ engine init vs weight load.
 ## Verify points (assumptions to confirm on first build)
 
 - `microsoft/VibeVoice-ASR` is the right, ungated model id and downloads at build.
-- `start_server.py` path / `--gpu-memory-utilization` / `--port` flags match VibeVoice `main`.
-  If Microsoft moved the script, set `VIBING_ASR_START_SCRIPT`.
+- L4 startup should keep `VIBING_ASR_MAX_MODEL_LEN=4096`, `VIBING_ASR_MAX_NUM_SEQS=1`,
+  and `VIBING_ASR_ENFORCE_EAGER=1`. Microsoft's long-form defaults are `65536` tokens
+  and `64` sequences, which are not appropriate for a single short dictation request.
+- The direct `vllm serve` options in `handler.py` should continue matching Microsoft's
+  VibeVoice vLLM launcher if their plugin changes.
 - To add Gemma later: set `VIBING_GEMMA_ENABLED=1`, drop `VIBING_ASR_GPU_MEM_UTIL` to ~0.55,
   bake the Gemma weights with an HF token, and use a 24GB+ (ideally 48GB) card.

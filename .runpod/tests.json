@@ -23,6 +23,22 @@
       {
         "key": "VIBING_ASR_GPU_MEM_UTIL",
         "value": "0.90"
+      },
+      {
+        "key": "VIBING_ASR_MAX_MODEL_LEN",
+        "value": "4096"
+      },
+      {
+        "key": "VIBING_ASR_MAX_NUM_SEQS",
+        "value": "1"
+      },
+      {
+        "key": "VIBING_ASR_ENFORCE_EAGER",
+        "value": "1"
+      },
+      {
+        "key": "VIBING_ASR_LOCAL_FILES_ONLY",
+        "value": "1"
       }
     ],
     "allowedCudaVersions": [

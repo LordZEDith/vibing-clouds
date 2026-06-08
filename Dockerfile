@@ -15,7 +15,7 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends git \
  && rm -rf /var/lib/apt/lists/*
 
-# Microsoft's start_server.py lives in the VibeVoice repo; it expects to run from /app.
+# Clone Microsoft's VibeVoice repo; the installed vLLM plugin is used at runtime.
 RUN git clone --depth 1 https://github.com/microsoft/VibeVoice.git /app
 WORKDIR /app
 
@@ -28,20 +28,26 @@ RUN pip install --no-cache-dir \
       "transformers>=4.57" \
       pillow
 
-# Install the VibeVoice package + vLLM extra at BUILD time. start_server.py would
-# otherwise run this `pip install -e /app[vllm]` live on every cold start (its
-# default unless --skip-deps), which blew past the boot timeout. The handler now
-# launches with --skip-deps so cold start is only vLLM boot + model load.
+# Install the VibeVoice package + vLLM extra at build time. The handler launches
+# `vllm serve` directly, so runtime cold start is vLLM boot + local model load.
 RUN pip install --no-cache-dir -e "/app[vllm]"
 
-# Bake the ASR weights into the image's HF cache (no network volume on the Hub).
+# Bake the ASR weights and generated tokenizer files into the image's HF cache
+# (no network volume on the Hub).
 ENV HF_HOME=/models/hf \
     HF_HUB_ENABLE_HF_TRANSFER=1
 RUN huggingface-cli download microsoft/VibeVoice-ASR
+# Run the tokenizer tool by file path (it's a standalone stdlib script with no
+# package context; there is no vllm_plugin/tools/__init__.py, so `-m` would fail).
+RUN python3 -c "import subprocess, sys; from huggingface_hub import snapshot_download; model_path = snapshot_download('microsoft/VibeVoice-ASR', local_files_only=True); subprocess.check_call([sys.executable, '/app/vllm_plugin/tools/generate_tokenizer_files.py', '--output', model_path])"
 
 # Runtime defaults. Gemma off; ASR gets the whole GPU for this spike.
 ENV VIBING_GEMMA_ENABLED=0 \
     VIBING_ASR_GPU_MEM_UTIL=0.90 \
+    VIBING_ASR_MAX_MODEL_LEN=4096 \
+    VIBING_ASR_MAX_NUM_SEQS=1 \
+    VIBING_ASR_ENFORCE_EAGER=1 \
+    VIBING_ASR_LOCAL_FILES_ONLY=1 \
     VIBEVOICE_FFMPEG_MAX_CONCURRENCY=64 \
     PYTORCH_ALLOC_CONF=expandable_segments:True
 

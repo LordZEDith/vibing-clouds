@@ -26,8 +26,6 @@ import io
 import os
 import re
 import subprocess
-import sys
-import tempfile
 import time
 import urllib.request
 
@@ -39,15 +37,15 @@ import requests
 ASR_MODEL = os.environ.get("VIBING_ASR_MODEL", "microsoft/VibeVoice-ASR")
 ASR_PORT = int(os.environ.get("VIBING_ASR_PORT", "8000"))
 ASR_BASE_URL = f"http://127.0.0.1:{ASR_PORT}"
-# Leave VRAM headroom for Gemma when both share one GPU. Microsoft's default is 0.8.
-ASR_GPU_MEM_UTIL = os.environ.get("VIBING_ASR_GPU_MEM_UTIL", "0.55")
-# Microsoft's default max-model-len is 65536 (sized for 60-min audio). That KV
-# cache won't fit a bf16 model on a 24GB card -> engine core init OOM. Dictation
-# clips are seconds long, so cap it small.
-ASR_MAX_MODEL_LEN = os.environ.get("VIBING_ASR_MAX_MODEL_LEN", "8192")
-ASR_START_SCRIPT = os.environ.get(
-    "VIBING_ASR_START_SCRIPT", "/app/vllm_plugin/scripts/start_server.py"
-)
+# Leave VRAM headroom for Gemma when both share one GPU. ASR-only Hub tests use
+# 0.90, but the context/batch caps below are what make L4 startup fit.
+ASR_GPU_MEM_UTIL = os.environ.get("VIBING_ASR_GPU_MEM_UTIL", "0.90")
+# Microsoft's launcher defaults to 65536 tokens and 64 sequences for long-form,
+# high-throughput ASR. Vibing sends one short dictation clip at a time.
+ASR_MAX_MODEL_LEN = os.environ.get("VIBING_ASR_MAX_MODEL_LEN", "4096")
+ASR_MAX_NUM_SEQS = os.environ.get("VIBING_ASR_MAX_NUM_SEQS", "1")
+ASR_ENFORCE_EAGER = os.environ.get("VIBING_ASR_ENFORCE_EAGER", "1") == "1"
+ASR_LOCAL_FILES_ONLY = os.environ.get("VIBING_ASR_LOCAL_FILES_ONLY", "1") == "1"
 ASR_BOOT_TIMEOUT_S = int(os.environ.get("VIBING_ASR_BOOT_TIMEOUT_S", "780"))
 
 GEMMA_ENABLED = os.environ.get("VIBING_GEMMA_ENABLED", "1") == "1"
@@ -82,21 +80,45 @@ def _asr_log_tail(limit: int = 16000) -> str:
         return "(no asr server log)"
 
 
+def _resolve_asr_model_path() -> str:
+    from huggingface_hub import snapshot_download
+
+    return snapshot_download(ASR_MODEL, local_files_only=ASR_LOCAL_FILES_ONLY)
+
+
 def _start_asr_server() -> None:
     global _ASR_PROC
-    # --skip-deps: the pip install -e /app[vllm] is baked into the image at build
-    # time, so cold start is just vLLM boot + model load, not a live pip install.
+    model_path = _resolve_asr_model_path()
     cmd = [
-        sys.executable,
-        ASR_START_SCRIPT,
-        "--skip-deps",
-        "--gpu-memory-utilization",
-        ASR_GPU_MEM_UTIL,
+        "vllm",
+        "serve",
+        model_path,
+        "--served-model-name",
+        "vibevoice",
+        "--trust-remote-code",
+        "--dtype",
+        "bfloat16",
+        "--max-num-seqs",
+        ASR_MAX_NUM_SEQS,
         "--max-model-len",
         ASR_MAX_MODEL_LEN,
+        "--gpu-memory-utilization",
+        ASR_GPU_MEM_UTIL,
+        "--no-enable-prefix-caching",
+        "--enable-chunked-prefill",
+        "--chat-template-content-format",
+        "openai",
+        "--tensor-parallel-size",
+        "1",
+        "--data-parallel-size",
+        "1",
+        "--allowed-local-media-path",
+        "/app",
         "--port",
         str(ASR_PORT),
     ]
+    if ASR_ENFORCE_EAGER:
+        cmd.append("--enforce-eager")
     _log(f"launching ASR vLLM server: {' '.join(cmd)}")
     logf = open(_ASR_LOG, "wb")
     _ASR_PROC = subprocess.Popen(
@@ -108,12 +130,12 @@ def _wait_for_asr() -> None:
     deadline = time.monotonic() + ASR_BOOT_TIMEOUT_S
     health = f"{ASR_BASE_URL}/health"
     while time.monotonic() < deadline:
-        # Fail fast (with the real error) if start_server.py died instead of
+        # Fail fast (with the real error) if vLLM died instead of
         # blindly waiting out the whole timeout.
         if _ASR_PROC is not None and _ASR_PROC.poll() is not None:
             raise RuntimeError(
                 f"ASR server exited early (code={_ASR_PROC.returncode}).\n"
-                f"--- start_server.py log tail ---\n{_asr_log_tail()}"
+                f"--- ASR server log tail ---\n{_asr_log_tail()}"
             )
         try:
             with urllib.request.urlopen(health, timeout=2) as resp:
@@ -124,7 +146,7 @@ def _wait_for_asr() -> None:
         time.sleep(3)
     raise RuntimeError(
         f"ASR server not healthy after {ASR_BOOT_TIMEOUT_S}s.\n"
-        f"--- start_server.py log tail ---\n{_asr_log_tail()}"
+        f"--- ASR server log tail ---\n{_asr_log_tail()}"
     )
 
 
