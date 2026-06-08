@@ -1,83 +1,74 @@
+[![Runpod](https://api.runpod.io/badge/LordZEDith/vibing-clouds)](https://console.runpod.io/hub/LordZEDith/vibing-clouds)
+
 # Vibing-Cloud — RunPod serverless cold-start spike
 
-Purpose: prove (or kill) the idea of running VibeVoice-ASR + Gemma-4 polish on a
-**RunPod serverless, scale-to-zero** GPU instead of on the user's machine. The whole
-point of this spike is to measure **cold start** before rewriting the desktop client.
+Purpose: prove (or kill) the idea of running VibeVoice-ASR on a **RunPod serverless,
+scale-to-zero** GPU instead of on the user's machine. The whole point of this spike is to
+measure **cold start** before rewriting the Vibing desktop client.
+
+This first cut is **ASR only** — it measures the dominant cold-start cost (the ~16GB
+VibeVoice checkpoint + vLLM boot). Gemma-4 transcript polish is wired in `handler.py` but
+**off by default** (`VIBING_GEMMA_ENABLED=0`): it's a gated Google model needing an HF
+token at build, so it's added once the ASR number is in.
 
 ## What's here
 
 | file | what it does |
 |------|--------------|
-| `handler.py` | RunPod worker. Boots Microsoft's VibeVoice vLLM ASR server (`:8000`, OpenAI-compatible) + loads Gemma-4 via transformers. Each job: audio → transcript → polished text, with decomposed timings. |
-| `Dockerfile` | `vllm/vllm-openai:v0.14.1` + the VibeVoice repo + handler deps. |
+| `handler.py` | RunPod worker. Boots Microsoft's VibeVoice vLLM ASR server (`:8000`, OpenAI-compatible). Each job: base64 audio → transcript, with decomposed timings. Optional Gemma polish when enabled. |
+| `Dockerfile` | `vllm/vllm-openai:v0.14.1` + the VibeVoice repo, with the ASR weights **baked in**. |
+| `.runpod/hub.json` | RunPod Hub deploy config (audio category, 24GB GPU pool, env toggles). |
+| `.runpod/tests.json` | Hub smoke test — a real base64 WAV through the ASR path. |
 | `bench_coldstart.py` | Runs **locally**. Hits the endpoint cold then warm, prints the table + verdict. |
 
 ## Architecture (why it's shaped this way)
 
-VibeVoice-ASR has a first-class vLLM path (Microsoft's `vllm_plugin`) that exposes an
-**OpenAI-compatible `/v1/chat/completions`** endpoint — audio is sent as a base64
-`audio_url`. Gemma-4-e2b is loaded in-process via `transformers` (the same code path
-the desktop app already uses, with `device="cuda"`). Both share one 24GB GPU; ASR's
-`--gpu-memory-utilization` is dropped to `0.55` (env `VIBING_ASR_GPU_MEM_UTIL`) to leave
-room for Gemma. Microsoft serves ASR in **bf16 (unquantized)** → plan for a 24GB card
-(L4 / A5000 / A10 / 4090).
+VibeVoice-ASR has a first-class vLLM path (Microsoft's `vllm_plugin`) exposing an
+**OpenAI-compatible `/v1/chat/completions`** endpoint — audio sent as a base64 `audio_url`.
+Microsoft serves it in **bf16 (unquantized)** → a 24GB card (L4 / A5000 / A10 / 4090).
 
-## Deploy (GitHub build, no local Docker)
+The RunPod **Hub has no network-volume option**, so the weights are **baked into the
+image** (`huggingface-cli download` at build). They download once during the Hub build, not
+on every cold start — which is what makes the cold-start number representative.
 
-1. **Push this repo to GitHub.** RunPod's GitHub integration builds from a Dockerfile in
-   the repo. Either make `runpod-handler/` the repo root, or set the build context/Dockerfile
-   path to `runpod-handler/Dockerfile` in the RunPod template.
+## Deploy via the RunPod Hub
 
-2. **Create a Network Volume** (RunPod → Storage). ~40GB is plenty for the ASR + Gemma
-   weights. This is what makes cold start survivable — without it, every cold worker
-   re-downloads ~16GB+ of weights.
+The Hub builds from a tagged GitHub **release** of this repo. Steps the Hub walks you through:
 
-3. **Create a Serverless Endpoint** → *New Endpoint* → source **GitHub repo** → pick this
-   repo/branch. Set:
-   - **GPU**: 24GB (L4 / A5000 / A10 / 4090).
-   - **Network volume**: attach the one from step 2 → it mounts at `/runpod-volume`
-     (the Dockerfile points `HF_HOME` there).
-   - **FlashBoot**: ON. This caches the worker so scale-to-zero cold starts resume far
-     faster than a true cold boot — measure with it on, it's the realistic case.
-   - **Active workers**: `0` (we are testing pure scale-to-zero). Max workers: `1`.
-   - **Idle timeout**: short (e.g. 5s) so you can force cold starts between runs.
-   - **Container disk**: ≥20GB.
-
-4. **Pre-cache the weights onto the volume (one time).** The very first worker downloads
-   `microsoft/VibeVoice-ASR` (~16GB) + `google/gemma-4-E2B-it` to `/runpod-volume/hf`.
-   Trigger one request (next step) and just expect the first-ever cold start to be long
-   (download-bound). Every cold start after that reads weights off the volume — that's the
-   number we actually care about.
+1. `.runpod/hub.json` + `.runpod/tests.json` — ✅ in this repo.
+2. `Dockerfile` + `handler.py` — ✅ in this repo.
+3. **Add the badge** (top of this README) — ✅.
+4. **Create a GitHub release** → the Hub builds the image, runs `tests.json`, and publishes
+   the listing. The build downloads ~16GB, so expect it to take a while.
+5. From the Hub listing, **Deploy** → choose the **ASR only** preset, GPU 24GB, FlashBoot
+   **on**, active workers `0`, max `1`, short idle timeout.
 
 ## Run the benchmark
 
 ```bash
-cd runpod-handler
 pip install requests
 export RUNPOD_API_KEY=...        # Settings → API Keys
-export RUNPOD_ENDPOINT_ID=...    # the endpoint's id
+export RUNPOD_ENDPOINT_ID=...    # the deployed endpoint's id
 python3 bench_coldstart.py --idle-wait 360 --warm 10
 ```
 
-`--idle-wait 360` waits 6 min first so the worker scales to zero and the next request is
-a genuine cold start. Drop it to `0` to test warm-only.
+`--idle-wait 360` waits 6 min so the worker scales to zero and the next request is a genuine
+cold start. Drop it to `0` for warm-only.
 
 ## Reading the result
 
 - **warm p50 < ~2.5s** → great, feels local.
 - **cold < ~25s** → livable behind a "warming up…" HUD on first dictation.
-- **cold > ~45s** → scale-to-zero loses; reconsider 1 always-on active worker (costs
-  ~24/7 GPU) or a smaller/quantized ASR checkpoint.
+- **cold > ~45s** → scale-to-zero loses; reconsider 1 always-on active worker (24/7 GPU
+  cost) or a smaller/quantized ASR checkpoint.
 
-The handler reports `asr_ready_s` vs `gemma_load_s` separately so you can see whether
-cold start is dominated by vLLM engine init, weight load, or Gemma — each has a different
-fix.
+The handler reports `asr_ready_s` separately so you can see how much of cold start is vLLM
+engine init vs weight load.
 
-## Verify points (spike assumptions to confirm on first deploy)
+## Verify points (assumptions to confirm on first build)
 
-- `start_server.py` path and its `--gpu-memory-utilization` / `--port` flags match the
-  current VibeVoice `main`. If Microsoft moved the script, set `VIBING_ASR_START_SCRIPT`.
-- Gemma loader class (`AutoModelForImageTextToText`) matches the `gemma-4-E2B-it` repo.
-- Two engines (vLLM ASR + transformers Gemma) actually co-fit in 24GB at GMU 0.55 — if
-  OOM, lower `VIBING_ASR_GPU_MEM_UTIL` or set `VIBING_GEMMA_ENABLED=0` to isolate ASR
-  cold start first.
+- `microsoft/VibeVoice-ASR` is the right, ungated model id and downloads at build.
+- `start_server.py` path / `--gpu-memory-utilization` / `--port` flags match VibeVoice `main`.
+  If Microsoft moved the script, set `VIBING_ASR_START_SCRIPT`.
+- To add Gemma later: set `VIBING_GEMMA_ENABLED=1`, drop `VIBING_ASR_GPU_MEM_UTIL` to ~0.55,
+  bake the Gemma weights with an HF token, and use a 24GB+ (ideally 48GB) card.
