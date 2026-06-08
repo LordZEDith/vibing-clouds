@@ -24,6 +24,7 @@ Timings returned per job:
 import base64
 import io
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -40,6 +41,10 @@ ASR_PORT = int(os.environ.get("VIBING_ASR_PORT", "8000"))
 ASR_BASE_URL = f"http://127.0.0.1:{ASR_PORT}"
 # Leave VRAM headroom for Gemma when both share one GPU. Microsoft's default is 0.8.
 ASR_GPU_MEM_UTIL = os.environ.get("VIBING_ASR_GPU_MEM_UTIL", "0.55")
+# Microsoft's default max-model-len is 65536 (sized for 60-min audio). That KV
+# cache won't fit a bf16 model on a 24GB card -> engine core init OOM. Dictation
+# clips are seconds long, so cap it small.
+ASR_MAX_MODEL_LEN = os.environ.get("VIBING_ASR_MAX_MODEL_LEN", "8192")
 ASR_START_SCRIPT = os.environ.get(
     "VIBING_ASR_START_SCRIPT", "/app/vllm_plugin/scripts/start_server.py"
 )
@@ -66,10 +71,13 @@ _ASR_PROC: subprocess.Popen | None = None
 _ASR_LOG = "/tmp/asr_server.log"
 
 
-def _asr_log_tail(limit: int = 4000) -> str:
+def _asr_log_tail(limit: int = 16000) -> str:
+    # The vLLM EngineCore subprocess prints the *root cause* well before the API
+    # server's re-raise, so capture a wide tail and strip ANSI colour codes.
     try:
         with open(_ASR_LOG, "rb") as f:
-            return f.read()[-limit:].decode("utf-8", "replace")
+            raw = f.read()[-limit:].decode("utf-8", "replace")
+        return re.sub(r"\x1b\[[0-9;]*m", "", raw)
     except Exception:
         return "(no asr server log)"
 
@@ -84,6 +92,8 @@ def _start_asr_server() -> None:
         "--skip-deps",
         "--gpu-memory-utilization",
         ASR_GPU_MEM_UTIL,
+        "--max-model-len",
+        ASR_MAX_MODEL_LEN,
         "--port",
         str(ASR_PORT),
     ]
