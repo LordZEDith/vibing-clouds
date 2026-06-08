@@ -19,17 +19,20 @@ RUN apt-get update \
 RUN git clone --depth 1 https://github.com/microsoft/VibeVoice.git /app
 WORKDIR /app
 
-# Handler + plugin deps. transformers/pillow are for the (disabled) Gemma path.
+# Handler deps. transformers/pillow are for the (disabled) Gemma path.
 RUN pip install --no-cache-dir \
       runpod \
       requests \
       "huggingface_hub[cli]" \
       hf_transfer \
       "transformers>=4.57" \
-      pillow \
- && if [ -f /app/vllm_plugin/requirements.txt ]; then \
-      pip install --no-cache-dir -r /app/vllm_plugin/requirements.txt ; \
-    fi
+      pillow
+
+# Install the VibeVoice package + vLLM extra at BUILD time. start_server.py would
+# otherwise run this `pip install -e /app[vllm]` live on every cold start (its
+# default unless --skip-deps), which blew past the boot timeout. The handler now
+# launches with --skip-deps so cold start is only vLLM boot + model load.
+RUN pip install --no-cache-dir -e "/app[vllm]"
 
 # Bake the ASR weights into the image's HF cache (no network volume on the Hub).
 ENV HF_HOME=/models/hf \

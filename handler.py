@@ -43,7 +43,7 @@ ASR_GPU_MEM_UTIL = os.environ.get("VIBING_ASR_GPU_MEM_UTIL", "0.55")
 ASR_START_SCRIPT = os.environ.get(
     "VIBING_ASR_START_SCRIPT", "/app/vllm_plugin/scripts/start_server.py"
 )
-ASR_BOOT_TIMEOUT_S = int(os.environ.get("VIBING_ASR_BOOT_TIMEOUT_S", "600"))
+ASR_BOOT_TIMEOUT_S = int(os.environ.get("VIBING_ASR_BOOT_TIMEOUT_S", "780"))
 
 GEMMA_ENABLED = os.environ.get("VIBING_GEMMA_ENABLED", "1") == "1"
 GEMMA_MODEL = os.environ.get("VIBING_GEMMA_MODEL", "google/gemma-4-E2B-it")
@@ -62,32 +62,60 @@ def _log(msg: str) -> None:
 # ---------------------------------------------------------------------------
 # Worker init (this is the cold-start cost we are measuring)
 # ---------------------------------------------------------------------------
+_ASR_PROC: subprocess.Popen | None = None
+_ASR_LOG = "/tmp/asr_server.log"
+
+
+def _asr_log_tail(limit: int = 4000) -> str:
+    try:
+        with open(_ASR_LOG, "rb") as f:
+            return f.read()[-limit:].decode("utf-8", "replace")
+    except Exception:
+        return "(no asr server log)"
+
+
 def _start_asr_server() -> None:
+    global _ASR_PROC
+    # --skip-deps: the pip install -e /app[vllm] is baked into the image at build
+    # time, so cold start is just vLLM boot + model load, not a live pip install.
     cmd = [
         sys.executable,
         ASR_START_SCRIPT,
+        "--skip-deps",
         "--gpu-memory-utilization",
         ASR_GPU_MEM_UTIL,
         "--port",
         str(ASR_PORT),
     ]
     _log(f"launching ASR vLLM server: {' '.join(cmd)}")
-    # Inherit stdout/stderr so vLLM boot logs land in the RunPod worker log.
-    subprocess.Popen(cmd, env=os.environ.copy())
+    logf = open(_ASR_LOG, "wb")
+    _ASR_PROC = subprocess.Popen(
+        cmd, cwd="/app", env=os.environ.copy(), stdout=logf, stderr=subprocess.STDOUT
+    )
 
 
 def _wait_for_asr() -> None:
     deadline = time.monotonic() + ASR_BOOT_TIMEOUT_S
     health = f"{ASR_BASE_URL}/health"
     while time.monotonic() < deadline:
+        # Fail fast (with the real error) if start_server.py died instead of
+        # blindly waiting out the whole timeout.
+        if _ASR_PROC is not None and _ASR_PROC.poll() is not None:
+            raise RuntimeError(
+                f"ASR server exited early (code={_ASR_PROC.returncode}).\n"
+                f"--- start_server.py log tail ---\n{_asr_log_tail()}"
+            )
         try:
             with urllib.request.urlopen(health, timeout=2) as resp:
                 if resp.status == 200:
                     return
         except Exception:
             pass
-        time.sleep(2)
-    raise RuntimeError(f"ASR server not healthy after {ASR_BOOT_TIMEOUT_S}s")
+        time.sleep(3)
+    raise RuntimeError(
+        f"ASR server not healthy after {ASR_BOOT_TIMEOUT_S}s.\n"
+        f"--- start_server.py log tail ---\n{_asr_log_tail()}"
+    )
 
 
 def _load_gemma() -> None:
