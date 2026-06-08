@@ -10,6 +10,11 @@
 # needs an HF token at build). We measure the dominant ASR cold start first.
 FROM vllm/vllm-openai:v0.14.1
 
+# The vllm/vllm-openai base image has no git, so install it first (exit 127 otherwise).
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends git \
+ && rm -rf /var/lib/apt/lists/*
+
 # Microsoft's start_server.py lives in the VibeVoice repo; it expects to run from /app.
 RUN git clone --depth 1 https://github.com/microsoft/VibeVoice.git /app
 WORKDIR /app
