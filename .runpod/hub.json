@@ -17,12 +17,14 @@
         "name": "ASR only (cold-start spike)",
         "defaults": {
           "VIBING_GEMMA_ENABLED": "0",
-          "VIBING_ASR_GPU_MEM_UTIL": "0.90",
-          "VIBING_ASR_MAX_MODEL_LEN": "1024",
+          "VIBING_ASR_GPU_MEM_UTIL": "0.88",
+          "VIBING_ASR_MAX_MODEL_LEN": "256",
           "VIBING_ASR_MAX_NUM_SEQS": "1",
-          "VIBING_ASR_MAX_NUM_BATCHED_TOKENS": "1024",
+          "VIBING_ASR_MAX_NUM_BATCHED_TOKENS": "256",
+          "VIBING_ASR_MAX_OUTPUT_TOKENS": "128",
           "VIBING_ASR_ENFORCE_EAGER": "1",
           "VIBING_ASR_LOCAL_FILES_ONLY": "1",
+          "PYTORCH_ALLOC_CONF": "expandable_segments:True",
           "PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True"
         }
       }
@@ -46,8 +48,8 @@
         "input": {
           "name": "ASR GPU memory fraction",
           "type": "string",
-          "description": "vLLM --gpu-memory-utilization for VibeVoice-ASR. Lower to ~0.55 if you also enable Gemma on the same GPU.",
-          "default": "0.90"
+          "description": "vLLM --gpu-memory-utilization for VibeVoice-ASR. Keep 0.88 on L4 to leave room for multimodal startup profiling.",
+          "default": "0.88"
         }
       },
       {
@@ -55,8 +57,8 @@
         "input": {
           "name": "ASR max model length",
           "type": "string",
-          "description": "vLLM --max-model-len. Keep 1024 for L4 cold-start tests; raise only for longer audio on larger GPUs.",
-          "default": "1024"
+          "description": "vLLM --max-model-len. Keep 256 for L4 smoke tests; raise only for longer audio on larger GPUs.",
+          "default": "256"
         }
       },
       {
@@ -74,7 +76,16 @@
           "name": "ASR batch token cap",
           "type": "string",
           "description": "vLLM --max-num-batched-tokens. Keep equal to max model length for one short dictation request.",
-          "default": "1024"
+          "default": "256"
+        }
+      },
+      {
+        "key": "VIBING_ASR_MAX_OUTPUT_TOKENS",
+        "input": {
+          "name": "ASR output token cap",
+          "type": "string",
+          "description": "OpenAI max_tokens for the ASR response. Keep small for the RunPod smoke WAV.",
+          "default": "128"
         }
       },
       {

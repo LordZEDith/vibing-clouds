@@ -37,16 +37,16 @@ import requests
 ASR_MODEL = os.environ.get("VIBING_ASR_MODEL", "microsoft/VibeVoice-ASR")
 ASR_PORT = int(os.environ.get("VIBING_ASR_PORT", "8000"))
 ASR_BASE_URL = f"http://127.0.0.1:{ASR_PORT}"
-# Leave VRAM headroom for Gemma when both share one GPU. ASR-only Hub tests use
-# 0.90, but the context/batch caps below are what make L4 startup fit.
-ASR_GPU_MEM_UTIL = os.environ.get("VIBING_ASR_GPU_MEM_UTIL", "0.90")
+# Leave enough VRAM for VibeVoice's multimodal startup profile on L4.
+ASR_GPU_MEM_UTIL = os.environ.get("VIBING_ASR_GPU_MEM_UTIL", "0.88")
 # Microsoft's launcher defaults to 65536 tokens and 64 sequences for long-form,
 # high-throughput ASR. Vibing sends one short dictation clip at a time.
-ASR_MAX_MODEL_LEN = os.environ.get("VIBING_ASR_MAX_MODEL_LEN", "1024")
+ASR_MAX_MODEL_LEN = os.environ.get("VIBING_ASR_MAX_MODEL_LEN", "256")
 ASR_MAX_NUM_SEQS = os.environ.get("VIBING_ASR_MAX_NUM_SEQS", "1")
 ASR_MAX_NUM_BATCHED_TOKENS = os.environ.get(
     "VIBING_ASR_MAX_NUM_BATCHED_TOKENS", ASR_MAX_MODEL_LEN
 )
+ASR_MAX_OUTPUT_TOKENS = int(os.environ.get("VIBING_ASR_MAX_OUTPUT_TOKENS", "128"))
 ASR_ENFORCE_EAGER = os.environ.get("VIBING_ASR_ENFORCE_EAGER", "1") == "1"
 ASR_LOCAL_FILES_ONLY = os.environ.get("VIBING_ASR_LOCAL_FILES_ONLY", "1") == "1"
 ASR_BOOT_TIMEOUT_S = int(os.environ.get("VIBING_ASR_BOOT_TIMEOUT_S", "780"))
@@ -206,7 +206,7 @@ def _transcribe(audio_b64: str, audio_mime: str, hotwords: list[str]) -> str:
                 ],
             },
         ],
-        "max_tokens": 4096,
+        "max_tokens": ASR_MAX_OUTPUT_TOKENS,
         "temperature": 0.0,
         "stream": False,
     }

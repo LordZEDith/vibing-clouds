@@ -22,11 +22,11 @@
       },
       {
         "key": "VIBING_ASR_GPU_MEM_UTIL",
-        "value": "0.90"
+        "value": "0.88"
       },
       {
         "key": "VIBING_ASR_MAX_MODEL_LEN",
-        "value": "1024"
+        "value": "256"
       },
       {
         "key": "VIBING_ASR_MAX_NUM_SEQS",
@@ -34,7 +34,11 @@
       },
       {
         "key": "VIBING_ASR_MAX_NUM_BATCHED_TOKENS",
-        "value": "1024"
+        "value": "256"
+      },
+      {
+        "key": "VIBING_ASR_MAX_OUTPUT_TOKENS",
+        "value": "128"
       },
       {
         "key": "VIBING_ASR_ENFORCE_EAGER",
@@ -43,6 +47,10 @@
       {
         "key": "VIBING_ASR_LOCAL_FILES_ONLY",
         "value": "1"
+      },
+      {
+        "key": "PYTORCH_ALLOC_CONF",
+        "value": "expandable_segments:True"
       },
       {
         "key": "PYTORCH_CUDA_ALLOC_CONF",

@@ -43,13 +43,15 @@ RUN python3 -c "import subprocess, sys; from huggingface_hub import snapshot_dow
 
 # Runtime defaults. Gemma off; ASR gets the whole GPU for this spike.
 ENV VIBING_GEMMA_ENABLED=0 \
-    VIBING_ASR_GPU_MEM_UTIL=0.90 \
-    VIBING_ASR_MAX_MODEL_LEN=1024 \
+    VIBING_ASR_GPU_MEM_UTIL=0.88 \
+    VIBING_ASR_MAX_MODEL_LEN=256 \
     VIBING_ASR_MAX_NUM_SEQS=1 \
-    VIBING_ASR_MAX_NUM_BATCHED_TOKENS=1024 \
+    VIBING_ASR_MAX_NUM_BATCHED_TOKENS=256 \
+    VIBING_ASR_MAX_OUTPUT_TOKENS=128 \
     VIBING_ASR_ENFORCE_EAGER=1 \
     VIBING_ASR_LOCAL_FILES_ONLY=1 \
     VIBEVOICE_FFMPEG_MAX_CONCURRENCY=64 \
+    PYTORCH_ALLOC_CONF=expandable_segments:True \
     PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 COPY handler.py /app/handler.py
