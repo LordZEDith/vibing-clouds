@@ -1,0 +1,6 @@
+# Handler-side deps (also installed in the Dockerfile). vLLM + torch come from the
+# vllm/vllm-openai base image, so they are intentionally NOT pinned here.
+runpod
+requests
+transformers>=4.57
+pillow
