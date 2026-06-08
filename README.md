@@ -70,9 +70,13 @@ engine init vs weight load.
 ## Verify points (assumptions to confirm on first build)
 
 - `microsoft/VibeVoice-ASR` is the right, ungated model id and downloads at build.
-- L4 startup should keep `VIBING_ASR_MAX_MODEL_LEN=4096`, `VIBING_ASR_MAX_NUM_SEQS=1`,
-  and `VIBING_ASR_ENFORCE_EAGER=1`. Microsoft's long-form defaults are `65536` tokens
-  and `64` sequences, which are not appropriate for a single short dictation request.
+- L4 startup should keep `VIBING_ASR_MAX_MODEL_LEN=1024`,
+  `VIBING_ASR_MAX_NUM_BATCHED_TOKENS=1024`, `VIBING_ASR_MAX_NUM_SEQS=1`, and
+  `VIBING_ASR_ENFORCE_EAGER=1`. Microsoft's long-form defaults are `65536` tokens and
+  `64` sequences, which are not appropriate for a single short dictation request.
+- Keep `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`; `PYTORCH_ALLOC_CONF` does not
+  configure the CUDA allocator and can leave enough reserved memory unavailable to trip
+  the VibeVoice audio encoder on L4.
 - The direct `vllm serve` options in `handler.py` should continue matching Microsoft's
   VibeVoice vLLM launcher if their plugin changes.
 - To add Gemma later: set `VIBING_GEMMA_ENABLED=1`, drop `VIBING_ASR_GPU_MEM_UTIL` to ~0.55,

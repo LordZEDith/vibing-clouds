@@ -42,8 +42,11 @@ ASR_BASE_URL = f"http://127.0.0.1:{ASR_PORT}"
 ASR_GPU_MEM_UTIL = os.environ.get("VIBING_ASR_GPU_MEM_UTIL", "0.90")
 # Microsoft's launcher defaults to 65536 tokens and 64 sequences for long-form,
 # high-throughput ASR. Vibing sends one short dictation clip at a time.
-ASR_MAX_MODEL_LEN = os.environ.get("VIBING_ASR_MAX_MODEL_LEN", "4096")
+ASR_MAX_MODEL_LEN = os.environ.get("VIBING_ASR_MAX_MODEL_LEN", "1024")
 ASR_MAX_NUM_SEQS = os.environ.get("VIBING_ASR_MAX_NUM_SEQS", "1")
+ASR_MAX_NUM_BATCHED_TOKENS = os.environ.get(
+    "VIBING_ASR_MAX_NUM_BATCHED_TOKENS", ASR_MAX_MODEL_LEN
+)
 ASR_ENFORCE_EAGER = os.environ.get("VIBING_ASR_ENFORCE_EAGER", "1") == "1"
 ASR_LOCAL_FILES_ONLY = os.environ.get("VIBING_ASR_LOCAL_FILES_ONLY", "1") == "1"
 ASR_BOOT_TIMEOUT_S = int(os.environ.get("VIBING_ASR_BOOT_TIMEOUT_S", "780"))
@@ -100,6 +103,8 @@ def _start_asr_server() -> None:
         "bfloat16",
         "--max-num-seqs",
         ASR_MAX_NUM_SEQS,
+        "--max-num-batched-tokens",
+        ASR_MAX_NUM_BATCHED_TOKENS,
         "--max-model-len",
         ASR_MAX_MODEL_LEN,
         "--gpu-memory-utilization",

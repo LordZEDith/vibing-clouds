@@ -26,11 +26,15 @@
       },
       {
         "key": "VIBING_ASR_MAX_MODEL_LEN",
-        "value": "4096"
+        "value": "1024"
       },
       {
         "key": "VIBING_ASR_MAX_NUM_SEQS",
         "value": "1"
+      },
+      {
+        "key": "VIBING_ASR_MAX_NUM_BATCHED_TOKENS",
+        "value": "1024"
       },
       {
         "key": "VIBING_ASR_ENFORCE_EAGER",
@@ -39,6 +43,10 @@
       {
         "key": "VIBING_ASR_LOCAL_FILES_ONLY",
         "value": "1"
+      },
+      {
+        "key": "PYTORCH_CUDA_ALLOC_CONF",
+        "value": "expandable_segments:True"
       }
     ],
     "allowedCudaVersions": [

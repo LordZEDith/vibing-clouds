@@ -18,10 +18,12 @@
         "defaults": {
           "VIBING_GEMMA_ENABLED": "0",
           "VIBING_ASR_GPU_MEM_UTIL": "0.90",
-          "VIBING_ASR_MAX_MODEL_LEN": "4096",
+          "VIBING_ASR_MAX_MODEL_LEN": "1024",
           "VIBING_ASR_MAX_NUM_SEQS": "1",
+          "VIBING_ASR_MAX_NUM_BATCHED_TOKENS": "1024",
           "VIBING_ASR_ENFORCE_EAGER": "1",
-          "VIBING_ASR_LOCAL_FILES_ONLY": "1"
+          "VIBING_ASR_LOCAL_FILES_ONLY": "1",
+          "PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True"
         }
       }
     ],
@@ -53,8 +55,8 @@
         "input": {
           "name": "ASR max model length",
           "type": "string",
-          "description": "vLLM --max-model-len. Keep 4096 for L4/A10 cold-start tests; raise only for longer audio on larger GPUs.",
-          "default": "4096"
+          "description": "vLLM --max-model-len. Keep 1024 for L4 cold-start tests; raise only for longer audio on larger GPUs.",
+          "default": "1024"
         }
       },
       {
@@ -64,6 +66,15 @@
           "type": "string",
           "description": "vLLM --max-num-seqs. Vibing sends one dictation request at a time, so 1 minimizes startup memory.",
           "default": "1"
+        }
+      },
+      {
+        "key": "VIBING_ASR_MAX_NUM_BATCHED_TOKENS",
+        "input": {
+          "name": "ASR batch token cap",
+          "type": "string",
+          "description": "vLLM --max-num-batched-tokens. Keep equal to max model length for one short dictation request.",
+          "default": "1024"
         }
       },
       {
