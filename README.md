@@ -54,6 +54,15 @@ export RUNPOD_ENDPOINT_ID=...    # the deployed endpoint's id
 python3 bench_coldstart.py --idle-wait 360 --warm 10
 ```
 
+To benchmark a real recording:
+
+```bash
+python3 bench_coldstart.py \
+  --audio /Users/vsha/Downloads/testrecording.mp3 \
+  --hotwords "RPN,Rhys,Viktor,Adrian" \
+  --warm 3
+```
+
 `--idle-wait 360` waits 6 min so the worker scales to zero and the next request is a genuine
 cold start. Drop it to `0` for warm-only.
 
@@ -70,6 +79,10 @@ engine init vs weight load.
 ## Verify points (assumptions to confirm on first build)
 
 - `microsoft/VibeVoice-ASR` is the right, ungated model id and downloads at build.
+- GPU pool selection is controlled by `.runpod/hub.json` at `config.gpuIds`, not by an
+  environment variable in the Configure modal. Use pool IDs such as `AMPERE_24`, `ADA_24`,
+  and `ADA_48_PRO`. Exclude a specific GPU type with a leading `-`, for example:
+  `AMPERE_24,ADA_24,ADA_48_PRO,-NVIDIA L4`.
 - L4 startup should keep `VIBING_ASR_GPU_MEM_UTIL=0.88`,
   `VIBING_ASR_MAX_MODEL_LEN=256`, `VIBING_ASR_MAX_NUM_BATCHED_TOKENS=256`,
   `VIBING_ASR_MAX_NUM_SEQS=1`, and `VIBING_ASR_ENFORCE_EAGER=1`. Microsoft's long-form defaults are `65536` tokens and
