@@ -29,6 +29,10 @@
         "value": "/app/vibevoice-tokenizer"
       },
       {
+        "key": "VIBING_HF_CACHE_ROOT",
+        "value": "/runpod-volume/huggingface-cache/hub"
+      },
+      {
         "key": "VIBING_ASR_GPU_MEM_UTIL",
         "value": "0.88"
       },
@@ -46,7 +50,7 @@
       },
       {
         "key": "VIBING_ASR_MAX_OUTPUT_TOKENS",
-        "value": "1024"
+        "value": "128"
       },
       {
         "key": "VIBING_ASR_ENFORCE_EAGER",
@@ -63,6 +67,10 @@
       {
         "key": "MODEL_NAME",
         "value": "microsoft/VibeVoice-ASR"
+      },
+      {
+        "key": "RUNPOD_INIT_TIMEOUT",
+        "value": "800"
       },
       {
         "key": "PYTORCH_ALLOC_CONF",

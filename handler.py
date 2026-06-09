@@ -43,8 +43,9 @@ ASR_BASE_URL = f"http://127.0.0.1:{ASR_PORT}"
 # Leave enough VRAM for VibeVoice's multimodal startup profile.
 ASR_GPU_MEM_UTIL = os.environ.get("VIBING_ASR_GPU_MEM_UTIL", "0.88")
 # Microsoft's launcher defaults to 65536 tokens and 64 sequences for long-form,
-# high-throughput ASR. Vibing sends one short dictation clip at a time.
-ASR_MAX_MODEL_LEN = os.environ.get("VIBING_ASR_MAX_MODEL_LEN", "256")
+# high-throughput ASR. Vibing sends one short dictation clip at a time, but real
+# transcripts need more than the 256-token smoke-test cap.
+ASR_MAX_MODEL_LEN = os.environ.get("VIBING_ASR_MAX_MODEL_LEN", "2048")
 ASR_MAX_NUM_SEQS = os.environ.get("VIBING_ASR_MAX_NUM_SEQS", "1")
 ASR_MAX_NUM_BATCHED_TOKENS = os.environ.get(
     "VIBING_ASR_MAX_NUM_BATCHED_TOKENS", ASR_MAX_MODEL_LEN
@@ -63,6 +64,10 @@ ASR_BOOT_TIMEOUT_S = int(os.environ.get("VIBING_ASR_BOOT_TIMEOUT_S", "780"))
 GEMMA_ENABLED = os.environ.get("VIBING_GEMMA_ENABLED", "1") == "1"
 GEMMA_MODEL = os.environ.get("VIBING_GEMMA_MODEL", "google/gemma-4-E2B-it")
 GEMMA_MAX_NEW_TOKENS = int(os.environ.get("VIBING_GEMMA_MAX_NEW_TOKENS", "512"))
+
+if not ASR_ALLOW_RUNTIME_DOWNLOAD:
+    os.environ.setdefault("HF_HUB_OFFLINE", "1")
+    os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 
 _WORKER_START = time.monotonic()
 _COLD = True  # flipped False after the first job a worker serves

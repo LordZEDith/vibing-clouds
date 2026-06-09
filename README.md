@@ -42,7 +42,8 @@ The Hub builds from a tagged GitHub **release** of this repo. Steps the Hub walk
 2. `Dockerfile` + `handler.py` — ✅ in this repo.
 3. **Add the badge** (top of this README) — ✅.
 4. **Create a GitHub release** → the Hub builds the image, runs `tests.json`, and publishes
-   the listing.
+   the listing. RunPod indexes GitHub releases, not plain commits; their docs say updates
+   are usually indexed within an hour.
 5. From the Hub listing, **Deploy** → choose the **ASR only** preset, GPU A100 80GB
    (`AMPERE_80`), FlashBoot **on**, active workers `0`, max `1`, short idle timeout.
 6. In RunPod's endpoint configuration, scroll to **Model** and enter:
@@ -51,8 +52,9 @@ The Hub builds from a tagged GitHub **release** of this repo. Steps the Hub walk
    microsoft/VibeVoice-ASR
    ```
 
-   Leave `VIBING_ASR_ALLOW_RUNTIME_DOWNLOAD=0`. If the Model field is missing or wrong,
-   the worker fails fast instead of silently doing a slow model download.
+   Leave `VIBING_ASR_ALLOW_RUNTIME_DOWNLOAD=0`. The worker also forces Hugging Face offline
+   mode in this cached-only path. If the Model field is missing or wrong, it fails fast
+   instead of silently doing a slow model download.
 
 ## Run the benchmark
 
@@ -94,12 +96,14 @@ engine init vs weight load.
   `AMPERE_80`. This targets A100 80GB and excludes 24GB/48GB pools by omission.
   To exclude a specific GPU type within an included pool, prefix the GPU type with `-`
   (for example, `AMPERE_80,-NVIDIA A100-SXM4-80GB`).
-- Short dictation startup should keep `VIBING_ASR_GPU_MEM_UTIL=0.88`,
-  `VIBING_ASR_MAX_MODEL_LEN=256`, `VIBING_ASR_MAX_NUM_BATCHED_TOKENS=256`,
+- A100 deploy defaults should keep `VIBING_ASR_GPU_MEM_UTIL=0.88`,
+  `VIBING_ASR_MAX_MODEL_LEN=2048`, `VIBING_ASR_MAX_NUM_BATCHED_TOKENS=2048`,
   `VIBING_ASR_MAX_NUM_SEQS=1`, and `VIBING_ASR_ENFORCE_EAGER=1`. Microsoft's long-form defaults are `65536` tokens and
   `64` sequences, which are not appropriate for a single short dictation request.
 - Keep `VIBING_ASR_MAX_OUTPUT_TOKENS=1024` for real dictation. `128` truncated the
   structured ASR response in endpoint testing.
+- Keep `RUNPOD_INIT_TIMEOUT=800`; RunPod can mark workers unhealthy if initialization
+  exceeds 7 minutes, and this leaves enough room for slow first builds/tests.
 - Keep both `PYTORCH_ALLOC_CONF=expandable_segments:True` and
   `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`; the warning name differs across
   PyTorch/vLLM builds.
