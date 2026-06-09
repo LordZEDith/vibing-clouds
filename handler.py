@@ -35,9 +35,12 @@ import requests
 # Config (all overridable from the RunPod template env)
 # ---------------------------------------------------------------------------
 ASR_MODEL = os.environ.get("VIBING_ASR_MODEL", "microsoft/VibeVoice-ASR")
+HF_CACHE_ROOT = os.environ.get(
+    "VIBING_HF_CACHE_ROOT", "/runpod-volume/huggingface-cache/hub"
+)
 ASR_PORT = int(os.environ.get("VIBING_ASR_PORT", "8000"))
 ASR_BASE_URL = f"http://127.0.0.1:{ASR_PORT}"
-# Leave enough VRAM for VibeVoice's multimodal startup profile on L4.
+# Leave enough VRAM for VibeVoice's multimodal startup profile.
 ASR_GPU_MEM_UTIL = os.environ.get("VIBING_ASR_GPU_MEM_UTIL", "0.88")
 # Microsoft's launcher defaults to 65536 tokens and 64 sequences for long-form,
 # high-throughput ASR. Vibing sends one short dictation clip at a time.
@@ -46,9 +49,15 @@ ASR_MAX_NUM_SEQS = os.environ.get("VIBING_ASR_MAX_NUM_SEQS", "1")
 ASR_MAX_NUM_BATCHED_TOKENS = os.environ.get(
     "VIBING_ASR_MAX_NUM_BATCHED_TOKENS", ASR_MAX_MODEL_LEN
 )
-ASR_MAX_OUTPUT_TOKENS = int(os.environ.get("VIBING_ASR_MAX_OUTPUT_TOKENS", "128"))
+ASR_MAX_OUTPUT_TOKENS = int(os.environ.get("VIBING_ASR_MAX_OUTPUT_TOKENS", "1024"))
 ASR_ENFORCE_EAGER = os.environ.get("VIBING_ASR_ENFORCE_EAGER", "1") == "1"
 ASR_LOCAL_FILES_ONLY = os.environ.get("VIBING_ASR_LOCAL_FILES_ONLY", "1") == "1"
+ASR_ALLOW_RUNTIME_DOWNLOAD = (
+    os.environ.get("VIBING_ASR_ALLOW_RUNTIME_DOWNLOAD", "0") == "1"
+)
+ASR_TOKENIZER_PATH = os.environ.get(
+    "VIBING_ASR_TOKENIZER_PATH", "/app/vibevoice-tokenizer"
+)
 ASR_BOOT_TIMEOUT_S = int(os.environ.get("VIBING_ASR_BOOT_TIMEOUT_S", "780"))
 
 GEMMA_ENABLED = os.environ.get("VIBING_GEMMA_ENABLED", "1") == "1"
@@ -84,9 +93,57 @@ def _asr_log_tail(limit: int = 16000) -> str:
 
 
 def _resolve_asr_model_path() -> str:
+    if os.path.isdir(ASR_MODEL):
+        _log(f"using ASR model directory from VIBING_ASR_MODEL: {ASR_MODEL}")
+        return ASR_MODEL
+
+    cached_path = _resolve_hf_cached_snapshot(ASR_MODEL)
+    if cached_path:
+        _log(f"using RunPod cached ASR model snapshot: {cached_path}")
+        return cached_path
+
+    if not ASR_ALLOW_RUNTIME_DOWNLOAD and ASR_LOCAL_FILES_ONLY:
+        raise RuntimeError(
+            f"RunPod cached model not found for {ASR_MODEL!r} under {HF_CACHE_ROOT}. "
+            "Set the endpoint Model field to microsoft/VibeVoice-ASR, or set "
+            "VIBING_ASR_ALLOW_RUNTIME_DOWNLOAD=1 for a one-off fallback download."
+        )
+
     from huggingface_hub import snapshot_download
 
-    return snapshot_download(ASR_MODEL, local_files_only=ASR_LOCAL_FILES_ONLY)
+    _log(f"cached ASR model not found; falling back to snapshot_download({ASR_MODEL})")
+    return snapshot_download(
+        ASR_MODEL,
+        local_files_only=ASR_LOCAL_FILES_ONLY and not ASR_ALLOW_RUNTIME_DOWNLOAD,
+    )
+
+
+def _resolve_hf_cached_snapshot(model_id: str) -> str | None:
+    if "/" not in model_id:
+        return None
+    org, name = model_id.split("/", 1)
+    model_root = os.path.join(HF_CACHE_ROOT, f"models--{org}--{name}")
+    refs_main = os.path.join(model_root, "refs", "main")
+    snapshots_dir = os.path.join(model_root, "snapshots")
+
+    if os.path.isfile(refs_main):
+        with open(refs_main, "r", encoding="utf-8") as f:
+            snapshot_hash = f.read().strip()
+        candidate = os.path.join(snapshots_dir, snapshot_hash)
+        if os.path.isdir(candidate):
+            return candidate
+
+    if os.path.isdir(snapshots_dir):
+        versions = [
+            d
+            for d in os.listdir(snapshots_dir)
+            if os.path.isdir(os.path.join(snapshots_dir, d))
+        ]
+        if versions:
+            versions.sort()
+            return os.path.join(snapshots_dir, versions[0])
+
+    return None
 
 
 def _start_asr_server() -> None:
@@ -122,6 +179,10 @@ def _start_asr_server() -> None:
         "--port",
         str(ASR_PORT),
     ]
+    if os.path.isdir(ASR_TOKENIZER_PATH):
+        cmd.extend(["--tokenizer", ASR_TOKENIZER_PATH])
+    else:
+        _log(f"ASR tokenizer path not found, using model tokenizer: {ASR_TOKENIZER_PATH}")
     if ASR_ENFORCE_EAGER:
         cmd.append("--enforce-eager")
     _log(f"launching ASR vLLM server: {' '.join(cmd)}")

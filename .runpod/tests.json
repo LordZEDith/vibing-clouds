@@ -21,6 +21,14 @@
         "value": "0"
       },
       {
+        "key": "VIBING_ASR_MODEL",
+        "value": "microsoft/VibeVoice-ASR"
+      },
+      {
+        "key": "VIBING_ASR_TOKENIZER_PATH",
+        "value": "/app/vibevoice-tokenizer"
+      },
+      {
         "key": "VIBING_ASR_GPU_MEM_UTIL",
         "value": "0.88"
       },
@@ -38,7 +46,7 @@
       },
       {
         "key": "VIBING_ASR_MAX_OUTPUT_TOKENS",
-        "value": "128"
+        "value": "1024"
       },
       {
         "key": "VIBING_ASR_ENFORCE_EAGER",
@@ -46,7 +54,15 @@
       },
       {
         "key": "VIBING_ASR_LOCAL_FILES_ONLY",
+        "value": "0"
+      },
+      {
+        "key": "VIBING_ASR_ALLOW_RUNTIME_DOWNLOAD",
         "value": "1"
+      },
+      {
+        "key": "MODEL_NAME",
+        "value": "microsoft/VibeVoice-ASR"
       },
       {
         "key": "PYTORCH_ALLOC_CONF",

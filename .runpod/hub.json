@@ -1,6 +1,6 @@
 {
   "title": "Vibing Clouds",
-  "description": "VibeVoice-ASR speech-to-text (vLLM, OpenAI-compatible) for the Vibing dictation app. Sends base64 audio, returns a transcript. Gemma polish is available but off by default in this spike.",
+  "description": "VibeVoice-ASR speech-to-text (vLLM, OpenAI-compatible) for the Vibing dictation app. Uses RunPod cached models for lower scale-to-zero cold-start cost. Sends base64 audio, returns a transcript. Gemma polish is available but off by default in this spike.",
   "type": "serverless",
   "category": "audio",
   "iconUrl": "https://avatars.githubusercontent.com/u/11708006?v=4",
@@ -8,7 +8,7 @@
     "runsOn": "GPU",
     "containerDiskInGb": 30,
     "gpuCount": 1,
-    "gpuIds": "ADA_80_PRO,HOPPER_141,BLACKWELL_96,BLACKWELL_180,AMPERE_80",
+    "gpuIds": "AMPERE_80",
     "allowedCudaVersions": [
       "12.8",
       "12.7",
@@ -21,19 +21,61 @@
         "name": "ASR only (cold-start spike)",
         "defaults": {
           "VIBING_GEMMA_ENABLED": "0",
+          "VIBING_ASR_MODEL": "microsoft/VibeVoice-ASR",
+          "VIBING_ASR_TOKENIZER_PATH": "/app/vibevoice-tokenizer",
           "VIBING_ASR_GPU_MEM_UTIL": "0.88",
           "VIBING_ASR_MAX_MODEL_LEN": "256",
           "VIBING_ASR_MAX_NUM_SEQS": "1",
           "VIBING_ASR_MAX_NUM_BATCHED_TOKENS": "256",
-          "VIBING_ASR_MAX_OUTPUT_TOKENS": "128",
+          "VIBING_ASR_MAX_OUTPUT_TOKENS": "1024",
           "VIBING_ASR_ENFORCE_EAGER": "1",
           "VIBING_ASR_LOCAL_FILES_ONLY": "1",
+          "VIBING_ASR_ALLOW_RUNTIME_DOWNLOAD": "0",
+          "MODEL_NAME": "microsoft/VibeVoice-ASR",
           "PYTORCH_ALLOC_CONF": "expandable_segments:True",
           "PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True"
         }
       }
     ],
     "env": [
+      {
+        "key": "VIBING_ASR_MODEL",
+        "input": {
+          "name": "ASR cached model",
+          "type": "huggingface",
+          "description": "Hugging Face model id. Also set the endpoint Model field to this value so RunPod pre-caches it.",
+          "default": "microsoft/VibeVoice-ASR",
+          "required": true
+        }
+      },
+      {
+        "key": "MODEL_NAME",
+        "value": "microsoft/VibeVoice-ASR"
+      },
+      {
+        "key": "VIBING_ASR_TOKENIZER_PATH",
+        "value": "/app/vibevoice-tokenizer"
+      },
+      {
+        "key": "VIBING_ASR_ALLOW_RUNTIME_DOWNLOAD",
+        "input": {
+          "name": "Allow runtime model download",
+          "type": "string",
+          "description": "Keep off. Only turn on for debugging if the endpoint Model field was not set and you accept a slow billed startup.",
+          "options": [
+            {
+              "label": "Off",
+              "value": "0"
+            },
+            {
+              "label": "On",
+              "value": "1"
+            }
+          ],
+          "default": "0",
+          "advanced": true
+        }
+      },
       {
         "key": "VIBING_GEMMA_ENABLED",
         "input": {
@@ -58,7 +100,7 @@
         "input": {
           "name": "ASR GPU memory fraction",
           "type": "string",
-          "description": "vLLM --gpu-memory-utilization for VibeVoice-ASR. Keep 0.88 on L4 to leave room for multimodal startup profiling.",
+          "description": "vLLM --gpu-memory-utilization for VibeVoice-ASR. Default targets one A100 80GB worker.",
           "default": "0.88"
         }
       },
@@ -67,7 +109,7 @@
         "input": {
           "name": "ASR max model length",
           "type": "string",
-          "description": "vLLM --max-model-len. Keep 256 for L4 smoke tests; raise only for longer audio on larger GPUs.",
+          "description": "vLLM --max-model-len. Keep 256 for short dictation requests; raise only for longer audio.",
           "default": "256"
         }
       },
@@ -94,8 +136,8 @@
         "input": {
           "name": "ASR output token cap",
           "type": "string",
-          "description": "OpenAI max_tokens for the ASR response. Keep small for the RunPod smoke WAV.",
-          "default": "128"
+          "description": "OpenAI max_tokens for the ASR response. 1024 avoids truncating normal dictation transcripts.",
+          "default": "1024"
         }
       },
       {
@@ -103,7 +145,7 @@
         "input": {
           "name": "ASR eager mode",
           "type": "string",
-          "description": "Set to 1 to disable CUDA graph capture and reduce vLLM startup memory on 24GB GPUs.",
+          "description": "Set to 1 to disable CUDA graph capture and reduce vLLM startup memory.",
           "options": [
             {
               "label": "On",
