@@ -8,9 +8,13 @@
     "runsOn": "GPU",
     "containerDiskInGb": 30,
     "gpuCount": 1,
-    "gpuIds": "AMPERE_24,ADA_24,ADA_48_PRO",
+    "gpuIds": "ADA_80_PRO,HOPPER_141,BLACKWELL_96,BLACKWELL_180,AMPERE_80",
     "allowedCudaVersions": [
-      "12.8", "12.7", "12.6", "12.5", "12.4"
+      "12.8",
+      "12.7",
+      "12.6",
+      "12.5",
+      "12.4"
     ],
     "presets": [
       {
@@ -37,8 +41,14 @@
           "type": "string",
           "description": "Load Gemma-4 for transcript polish. Off for the ASR-only spike; needs a 24GB+ card and an HF token for the gated model when on.",
           "options": [
-            {"label": "Off (ASR only)", "value": "0"},
-            {"label": "On", "value": "1"}
+            {
+              "label": "Off (ASR only)",
+              "value": "0"
+            },
+            {
+              "label": "On",
+              "value": "1"
+            }
           ],
           "default": "0"
         }
@@ -95,8 +105,14 @@
           "type": "string",
           "description": "Set to 1 to disable CUDA graph capture and reduce vLLM startup memory on 24GB GPUs.",
           "options": [
-            {"label": "On", "value": "1"},
-            {"label": "Off", "value": "0"}
+            {
+              "label": "On",
+              "value": "1"
+            },
+            {
+              "label": "Off",
+              "value": "0"
+            }
           ],
           "default": "1"
         }

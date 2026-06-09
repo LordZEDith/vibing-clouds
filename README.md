@@ -80,9 +80,11 @@ engine init vs weight load.
 
 - `microsoft/VibeVoice-ASR` is the right, ungated model id and downloads at build.
 - GPU pool selection is controlled by `.runpod/hub.json` at `config.gpuIds`, not by an
-  environment variable in the Configure modal. Use pool IDs such as `AMPERE_24`, `ADA_24`,
-  and `ADA_48_PRO`. Exclude a specific GPU type with a leading `-`, for example:
-  `AMPERE_24,ADA_24,ADA_48_PRO,-NVIDIA L4`.
+  environment variable in the Configure modal. The default is performance-first:
+  `ADA_80_PRO,HOPPER_141,BLACKWELL_96,BLACKWELL_180,AMPERE_80`. This includes
+  H100/H200/Blackwell/A100-class pools and excludes 24GB/48GB pools by omission.
+  To exclude a specific GPU type within an included pool, prefix the GPU type with `-`
+  (for example, `ADA_80_PRO,HOPPER_141,-NVIDIA H100 PCIe`).
 - L4 startup should keep `VIBING_ASR_GPU_MEM_UTIL=0.88`,
   `VIBING_ASR_MAX_MODEL_LEN=256`, `VIBING_ASR_MAX_NUM_BATCHED_TOKENS=256`,
   `VIBING_ASR_MAX_NUM_SEQS=1`, and `VIBING_ASR_ENFORCE_EAGER=1`. Microsoft's long-form defaults are `65536` tokens and
